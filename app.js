@@ -5,6 +5,58 @@ const axios = require('axios');
 
 const app = express();
 const PORT = 3000;
+const GRAPH_API_VERSION = 'v22.0';
+const REQUIRED_ENV_VARS = [
+  'META_VERIFY_TOKEN',
+  'META_ACCESS_TOKEN',
+  'META_PHONE_NUMBER_ID',
+];
+
+function validateEnv() {
+  const missingVars = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
+
+  if (missingVars.length > 0) {
+    console.error(
+      `Missing required environment variables: ${missingVars.join(', ')}`
+    );
+    process.exit(1);
+  }
+}
+
+function extractInboundMessage(payload) {
+  return payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] ?? null;
+}
+
+function isSupportedTextMessage(message) {
+  return (
+    message &&
+    message.type === 'text' &&
+    typeof message.from === 'string' &&
+    typeof message.text?.body === 'string'
+  );
+}
+
+async function sendWhatsAppReply(senderPhone, userText) {
+  return axios.post(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${process.env.META_PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to: senderPhone,
+      type: 'text',
+      text: {
+        body: `Hi, this is Angelina. I saw you said: '${userText}'. I've checked Salesforce and your file is updated! ✅`,
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+}
+
+validateEnv();
 
 app.use(express.json());
 
@@ -23,14 +75,19 @@ app.get('/webhook', (req, res) => {
 });
 
 app.post('/webhook', (req, res) => {
+  // Meta expects a fast 200 response. Reply immediately so webhook retries
+  // do not block on downstream business logic or outbound API calls.
   res.sendStatus(200);
 
   void (async () => {
     try {
-      const msg = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+      const msg = extractInboundMessage(req.body);
 
-      if (!msg || msg.type !== 'text' || typeof msg.from !== 'string' || typeof msg.text?.body !== 'string') {
-        console.log('Received non-text or invalid webhook payload:', JSON.stringify(req.body));
+      if (!isSupportedTextMessage(msg)) {
+        console.log(
+          'Ignoring non-message or unsupported webhook event:',
+          JSON.stringify(req.body)
+        );
         return;
       }
 
@@ -42,23 +99,9 @@ app.post('/webhook', (req, res) => {
       console.log('[Salesforce] Contact found! Stage: Pre-Draft.');
       console.log('[Angelina AI] Generating contextual response...');
 
-      await axios.post(
-        `https://graph.facebook.com/v22.0/${process.env.META_PHONE_NUMBER_ID}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          to: senderPhone,
-          type: 'text',
-          text: {
-            body: `Hi, this is Angelina. I saw you said: '${userText}'. I've checked Salesforce and your file is updated! ✅`,
-          },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.META_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      // Keep the reply logic isolated so the webhook route stays easy to scan
+      // and the outbound call can be replaced later with richer orchestration.
+      await sendWhatsAppReply(senderPhone, userText);
 
       console.log(`[Meta] Reply sent successfully to ${senderPhone}.`);
     } catch (error) {
