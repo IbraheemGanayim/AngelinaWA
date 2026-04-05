@@ -66,6 +66,7 @@ Important:
 
 - `META_PHONE_NUMBER_ID` must be the Phone Number ID
 - Do not use the WhatsApp Business Account ID in its place
+- If this integration is intended for client delivery, partner distribution, or production onboarding at scale, consider enrolling as a Meta Tech Provider so your business setup is aligned with longer-term platform usage
 
 ## Environment Setup
 
@@ -145,10 +146,10 @@ Expected outcome:
 Angelina AI webhook listening on port 3000...
 
 --- NEW INBOUND MESSAGE ---
-[Salesforce] Searching for Contact with phone: 972...
+[Salesforce] Searching for Contact with phone: 15550001111...
 [Salesforce] Contact found! Stage: Pre-Draft.
 [Angelina AI] Generating contextual response...
-[Meta] Reply sent successfully to 972...
+[Meta] Reply sent successfully to 15550001111...
 ```
 
 Webhook events such as `sent`, `delivered`, and `read` are normal status callbacks. The service logs and ignores them.
@@ -169,7 +170,7 @@ This is the shape the app reads when a user sends a text message:
           "value": {
             "messages": [
               {
-                "from": "972549278861",
+                "from": "15550001111",
                 "type": "text",
                 "text": {
                   "body": "Hi"
@@ -191,7 +192,7 @@ This is the body sent to the Meta Graph API:
 ```json
 {
   "messaging_product": "whatsapp",
-  "to": "972549278861",
+  "to": "15550001111",
   "type": "text",
   "text": {
     "body": "Hi, this is Angelina. I saw you said: 'Hi'. I've checked Salesforce and your file is updated! ✅"
