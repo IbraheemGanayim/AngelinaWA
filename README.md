@@ -22,6 +22,24 @@ This repository is intended as a clean developer handoff: minimal code, explicit
 - Simulates CRM and AI workflow logging
 - Sends a dynamic reply through the Meta Graph API
 
+## Architecture
+
+The service follows a simple request flow:
+
+1. Meta sends a webhook event to `GET /webhook` or `POST /webhook`
+2. `GET /webhook` handles one-time webhook verification
+3. `POST /webhook` immediately returns `200` to prevent retries
+4. The app extracts the inbound WhatsApp message from the webhook payload
+5. The app simulates downstream business logic
+6. The app sends a reply through the Meta Graph API using the configured Phone Number ID
+
+In practice, this pattern is the correct baseline for production integrations:
+
+- acknowledge webhooks immediately
+- keep parsing defensive
+- isolate outbound messaging logic
+- log downstream failures without blocking Meta acknowledgments
+
 ## Tech Stack
 
 - Node.js
@@ -134,6 +152,52 @@ Angelina AI webhook listening on port 3000...
 ```
 
 Webhook events such as `sent`, `delivered`, and `read` are normal status callbacks. The service logs and ignores them.
+
+## Example Payloads
+
+### Example inbound webhook payload
+
+This is the shape the app reads when a user sends a text message:
+
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "changes": [
+        {
+          "value": {
+            "messages": [
+              {
+                "from": "972549278861",
+                "type": "text",
+                "text": {
+                  "body": "Hi"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Example outbound reply payload
+
+This is the body sent to the Meta Graph API:
+
+```json
+{
+  "messaging_product": "whatsapp",
+  "to": "972549278861",
+  "type": "text",
+  "text": {
+    "body": "Hi, this is Angelina. I saw you said: 'Hi'. I've checked Salesforce and your file is updated! ✅"
+  }
+}
+```
 
 ## API Summary
 
